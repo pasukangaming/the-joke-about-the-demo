@@ -21,34 +21,48 @@ function fail(message: string): never {
   throw new Error(message);
 }
 
+// Each rule of the competition gate gets its own check and its own error, so
+// a failure names exactly which rule the text broke instead of a generic
+// "invalid entry". Returns the joke's length in Unicode code points.
+function validateJoke(joke: string): number {
+  const codePoints = [...joke].length;
+  if (codePoints < MIN_LENGTH) {
+    fail(`entry is ${codePoints} code points, below the minimum of ${MIN_LENGTH}`);
+  }
+  if (codePoints > MAX_LENGTH) {
+    fail(`entry is ${codePoints} code points, above the maximum of ${MAX_LENGTH}`);
+  }
+  if (joke.trim().length === 0) {
+    fail("entry is only white space");
+  }
+  if (joke.includes("\n") || joke.includes("\r")) {
+    fail("entry must be a single line");
+  }
+  return codePoints;
+}
+
+// Read the file back from disk and confirm it is byte-for-byte the joke that
+// passed validation: the graded artifact is the file, not the string in
+// memory, so a write that silently truncated or re-encoded it must fail here
+// rather than ship a corrupted entry.
+function verifyWritten(entryPath: string, expected: string): void {
+  const onDisk = readFileSync(entryPath, "utf8");
+  if (onDisk !== expected) {
+    fail("entry.txt on disk does not match the validated joke");
+  }
+}
+
 function main(): void {
   // The grader sandbox provides /output. MAKEFUN_OUTPUT_DIR exists only so
   // the entry can be checked locally; a graded run always uses /output.
   const outputDir = process.env.MAKEFUN_OUTPUT_DIR ?? "/output";
 
-  const codePoints = [...JOKE].length;
-  if (codePoints < MIN_LENGTH || codePoints > MAX_LENGTH) {
-    fail(
-      `entry is ${codePoints} code points, outside the ${MIN_LENGTH}-${MAX_LENGTH} range`,
-    );
-  }
-  if (JOKE.trim().length === 0) {
-    fail("entry is only white space");
-  }
-  if (JOKE.includes("\n") || JOKE.includes("\r")) {
-    fail("entry must be a single line");
-  }
+  const codePoints = validateJoke(JOKE);
 
   mkdirSync(outputDir, { recursive: true });
   const entryPath = join(outputDir, "entry.txt");
   writeFileSync(entryPath, JOKE, "utf8");
-
-  // Verify what is actually on disk: the graded artifact is the file, so
-  // confirm it is exactly the joke that passed the checks above.
-  const onDisk = readFileSync(entryPath, "utf8");
-  if (onDisk !== JOKE) {
-    fail("entry.txt on disk does not match the joke");
-  }
+  verifyWritten(entryPath, JOKE);
 
   console.log(`wrote entry.txt (${codePoints} code points)`);
   console.log(JOKE);
